@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arabic Coffee Man - Cookie Catcher!</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a0a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            width: 600px;
+            height: 700px;
+        }
+        canvas {
+            display: block;
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(212, 175, 55, 0.3);
+        }
+        #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(26, 10, 46, 0.92);
+            border-radius: 12px;
+            z-index: 10;
+        }
+        #gameOverScreen { display: none; }
+        h1 {
+            color: #d4af37;
+            font-size: 36px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        }
+        .subtitle {
+            color: #c4956a;
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+        .instructions {
+            color: #e8d5b7;
+            font-size: 14px;
+            text-align: center;
+            line-height: 1.8;
+            margin-bottom: 30px;
+        }
+        .btn {
+            background: linear-gradient(135deg, #d4af37, #8b6914);
+            color: #1a0a2e;
+            border: none;
+            padding: 14px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: scale(1.08);
+            box-shadow: 0 0 25px rgba(212, 175, 55, 0.6);
+        }
+        #finalScore {
+            color: #d4af37;
+            font-size: 48px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .emoji-big { font-size: 60px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="600" height="700"></canvas>
+
+        <div id="startScreen">
+            <div class="emoji-big">☕🍪</div>
+            <h1>Cookie Catcher!</h1>
+            <p class="subtitle">Arabic Coffee Man's Sweet Adventure</p>
+            <div class="instructions">
+                ⬅️ ➡️ Arrow Keys or Mouse to move<br>
+                Catch cookies to score points!<br>
+                ☕ Coffee power-ups give bonus points!<br>
+                ❌ Avoid the rotten cookies!
+            </div>
+            <button class="btn" onclick="startGame()">Start Game</button>
+        </div>
+
+        <div id="gameOverScreen">
+            <div class="emoji-big">😢</div>
+            <h1>Game Over!</h1>
+            <p class="subtitle">Final Score</p>
+            <div id="finalScore">0</div>
+            <button class="btn" onclick="startGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+        const H = canvas.height;
+
+        let player, cookies, score, lives, gameLoop, speedMultiplier, spawnRate, frameCount;
+        let keys = {};
+        let mouseX = null;
+        let gameRunning = false;
+
+        // Player - Arabic Coffee Man
+        function createPlayer() {
+            return {
+                x: W / 2,
+                y: H - 80,
+                width: 60,
+                height: 70,
+                speed: 6
+            };
+        }
+
+        // Draw the Arabic Coffee Man
+        function drawPlayer(p) {
+            const cx = p.x;
+            const cy = p.y;
+
+            // Body - thobe (white robe)
+            ctx.fillStyle = '#f5f0e1';
+            ctx.beginPath();
+            ctx.moveTo(cx - 18, cy - 10);
+            ctx.lineTo(cx - 22, cy + 30);
+            ctx.lineTo(cx + 22, cy + 30);
+            ctx.lineTo(cx + 18, cy - 10);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#d4c5a0';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Head
+            ctx.fillStyle = '#c4956a';
+            ctx.beginPath();
+            ctx.arc(cx, cy - 20, 14, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Shemagh (head covering) - white with red pattern
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.ellipse(cx, cy - 26, 18, 10, 0, Math.PI, 0);
+            ctx.fill();
+
+            // Agal (black band)
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy - 28, 16, 6, 0, Math.PI + 0.3, -0.3);
+            ctx.stroke();
+
+            // Eyes
+            ctx.fillStyle = '#2c1810';
+            ctx.beginPath();
+            ctx.arc(cx - 5, cy - 21, 2, 0, Math.PI * 2);
+            ctx.arc(cx + 5, cy - 21, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Smile
+            ctx.strokeStyle = '#8b5e3c';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(cx, cy - 16, 5, 0.2, Math.PI - 0.2);
+            ctx.stroke();
+
+            // Arms reaching out
+            ctx.strokeStyle = '#c4956a';
+            ctx.lineWidth = 3;
+            // Left arm
+            ctx.beginPath();
+            ctx.moveTo(cx - 18, cy);
+            ctx.quadraticCurveTo(cx - 30, cy - 10, cx - 28, cy - 20);
+            ctx.stroke();
+            // Right arm
+            ctx.beginPath();
+            ctx.moveTo(cx + 18, cy);
+            ctx.quadraticCurveTo(cx + 30, cy - 10, cx + 28, cy - 20);
+            ctx.stroke();
+
+            // Dallah (Arabic coffee pot) in hand
+            ctx.fillStyle = '#d4af37';
+            ctx.beginPath();
+            ctx.ellipse(cx + 28, cy - 24, 6, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Pot spout
+            ctx.strokeStyle = '#d4af37';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cx + 28, cy - 32);
+            ctx.quadraticCurveTo(cx + 22, cy - 38, cx + 24, cy - 42);
+            ctx.stroke();
+            // Pot handle
+            ctx.beginPath();
+            ctx.moveTo(cx + 34, cy - 28);
+            ctx.quadraticCurveTo(cx + 40, cy - 24, cx + 34, cy - 18);
+            ctx.stroke();
+        }
+
+        // Cookie types
+        function createCookie() {
+            const types = [
+                { type: 'cookie', emoji: '🍪', points: 10, size: 28 },
+                { type: 'cookie', emoji: '🍪', points: 10, size: 28 },
+                { type: 'cookie', emoji: '🍪', points: 10, size: 28 },
+                { type: 'coffee', emoji: '☕', points: 25, size: 26 },
+                { type: 'bad', emoji: '💀', points: -1, size: 24 }  // -1 means lose a life
+            ];
+            const t = types[Math.floor(Math.random() * types.length)];
+            return {
+                x: Math.random() * (W - 60) + 30,
+                y: -30,
+                speed: (1.5 + Math.random() * 2) * speedMultiplier,
+                wobble: Math.random() * Math.PI * 2,
+                wobbleSpeed: 0.02 + Math.random() * 0.03,
+                ...t
+            };
+        }
+
+        function drawCookie(c) {
+            ctx.save();
+            c.wobble += c.wobbleSpeed;
+            const offsetX = Math.sin(c.wobble) * 15;
+            ctx.font = `${c.size}px serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(c.emoji, c.x + offsetX, c.y);
+
+            // Glow effect for coffee
+            if (c.type === 'coffee') {
+                ctx.shadowColor = '#d4af37';
+                ctx.shadowBlur = 15;
+                ctx.fillText(c.emoji, c.x + offsetX, c.y);
+                ctx.shadowBlur = 0;
+            }
+            // Red tint for bad cookies
+            if (c.type === 'bad') {
+                ctx.shadowColor = '#ff0000';
+                ctx.shadowBlur = 10;
+                ctx.fillText(c.emoji, c.x + offsetX, c.y);
+                ctx.shadowBlur = 0;
+            }
+            ctx.restore();
+            c._drawX = c.x + offsetX; // store for collision
+        }
+
+        function drawBackground() {
+            // Desert night gradient
+            const grad = ctx.createLinearGradient(0, 0, 0, H);
+            grad.addColorStop(0, '#0a0520');
+            grad.addColorStop(0.4, '#1a0a2e');
+            grad.addColorStop(0.7, '#2d1b4e');
+            grad.addColorStop(1, '#4a2c2a');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+
+            // Stars
+            ctx.fillStyle = '#fff';
+            const starSeed = 42;
+            for (let i = 0; i < 60; i++) {
+                const sx = ((i * 137 + starSeed) * 7) % W;
+                const sy = ((i * 97 + starSeed) * 3) % (H * 0.5);
+                const size = (i % 3 === 0) ? 2 : 1;
+                ctx.globalAlpha = 0.4 + (i % 5) * 0.12;
+                ctx.fillRect(sx, sy, size, size);
+            }
+            ctx.globalAlpha = 1;
+
+            // Crescent moon
+            ctx.fillStyle = '#f0e68c';
+            ctx.beginPath();
+            ctx.arc(500, 60, 20, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#0a0520';
+            ctx.beginPath();
+            ctx.arc(510, 55, 18, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Sand dunes at bottom
+            ctx.fillStyle = '#3d2b1f';
+            ctx.beginPath();
+            ctx.moveTo(0, H);
+            ctx.quadraticCurveTo(150, H - 40, 300, H - 15);
+            ctx.quadraticCurveTo(450, H - 45, W, H - 10);
+            ctx.lineTo(W, H);
+            ctx.closePath();
+            ctx.fill();
+
+            // Ground line
+            ctx.fillStyle = '#5a3d2b';
+            ctx.fillRect(0, H - 45, W, 3);
+        }
+
+        function drawHUD() {
+            // Score
+            ctx.fillStyle = '#d4af37';
+            ctx.font = 'bold 22px Segoe UI';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Score: ${score}`, 20, 35);
+
+            // Lives
+            ctx.textAlign = 'right';
+            let heartsText = '';
+            for (let i = 0; i < lives; i++) heartsText += '❤️ ';
+            ctx.font = '20px serif';
+            ctx.fillText(heartsText, W - 20, 35);
+
+            // Level indicator
+            ctx.fillStyle = '#c4956a';
+            ctx.font = '14px Segoe UI';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Speed: x${speedMultiplier.toFixed(1)}`, W / 2, 30);
+        }
+
+        function checkCollision(p, c) {
+            const dx = p.x - (c._drawX || c.x);
+            const dy = (p.y - 10) - c.y;
+            return Math.sqrt(dx * dx + dy * dy) < 35;
+        }
+
+        function showFloatingText(x, y, text, color) {
+            const ft = { x, y, text, color, alpha: 1, vy: -2 };
+            floatingTexts.push(ft);
+        }
+        let floatingTexts = [];
+
+        function drawFloatingTexts() {
+            floatingTexts = floatingTexts.filter(ft => {
+                ft.y += ft.vy;
+                ft.alpha -= 0.02;
+                ctx.globalAlpha = ft.alpha;
+                ctx.fillStyle = ft.color;
+                ctx.font = 'bold 18px Segoe UI';
+                ctx.textAlign = 'center';
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.globalAlpha = 1;
+                return ft.alpha > 0;
+            });
+        }
+
+        function update() {
+            if (!gameRunning) return;
+            frameCount++;
+
+            // Increase difficulty over time
+            if (frameCount % 600 === 0) {
+                speedMultiplier += 0.2;
+                spawnRate = Math.max(25, spawnRate - 5);
+            }
+
+            // Move player
+            if (mouseX !== null) {
+                const diff = mouseX - player.x;
+                if (Math.abs(diff) > 3) {
+                    player.x += Math.sign(diff) * Math.min(Math.abs(diff), player.speed + 2);
+                }
+            }
+            if (keys['ArrowLeft'] || keys['a']) player.x -= player.speed;
+            if (keys['ArrowRight'] || keys['d']) player.x += player.speed;
+
+            // Clamp player
+            player.x = Math.max(25, Math.min(W - 25, player.x));
+
+            // Spawn cookies
+            if (frameCount % spawnRate === 0) {
+                cookies.push(createCookie());
+            }
+
+            // Update cookies
+            cookies = cookies.filter(c => {
+                c.y += c.speed;
+
+                // Check collision with player
+                if (checkCollision(player, c)) {
+                    if (c.type === 'bad') {
+                        lives--;
+                        showFloatingText(c._drawX || c.x, c.y, '-1 ❤️', '#ff4444');
+                        if (lives <= 0) {
+                            gameOver();
+                        }
+                    } else {
+                        score += c.points;
+                        const label = c.type === 'coffee' ? `+${c.points} ☕` : `+${c.points}`;
+                        showFloatingText(c._drawX || c.x, c.y, label, '#d4af37');
+                    }
+                    return false;
+                }
+
+                // Remove if off screen
+                if (c.y > H + 30) return false;
+                return true;
+            });
+
+            draw();
+            gameLoop = requestAnimationFrame(update);
+        }
+
+        function draw() {
+            drawBackground();
+            cookies.forEach(c => drawCookie(c));
+            drawPlayer(player);
+            drawHUD();
+            drawFloatingTexts();
+        }
+
+        function startGame() {
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'none';
+
+            player = createPlayer();
+            cookies = [];
+            floatingTexts = [];
+            score = 0;
+            lives = 3;
+            speedMultiplier = 1;
+            spawnRate = 50;
+            frameCount = 0;
+            gameRunning = true;
+
+            if (gameLoop) cancelAnimationFrame(gameLoop);
+            update();
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            cancelAnimationFrame(gameLoop);
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('gameOverScreen').style.display = 'flex';
+        }
+
+        // Input handlers
+        document.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) {
+                e.preventDefault();
+            }
+        });
+        document.addEventListener('keyup', e => keys[e.key] = false);
+
+        canvas.addEventListener('mousemove', e => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = (e.clientX - rect.left) * (W / rect.width);
+        });
+        canvas.addEventListener('mouseleave', () => mouseX = null);
+
+        // Touch support
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            mouseX = (e.touches[0].clientX - rect.left) * (W / rect.width);
+        }, { passive: false });
+        canvas.addEventListener('touchend', () => mouseX = null);
+
+        // Initial draw
+        drawBackground();
+    </script>
+</body>
+</html>
